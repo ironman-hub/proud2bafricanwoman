@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>My account — Proud2bAfricanWoman</title>
+<meta name="theme-color" content="#0a1f4f">
+<link rel="icon" href="/img/logo-black.png">
+<link rel="preload" href="/fonts/cormorant-garamond-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="css/styles.css">
+</head>
+<body data-page="account">
+<main id="root"></main>
+<script src="js/app.js"></script>
+<script>
+P2B.ready.then(({ user }) => {
+  const { esc, money, api } = P2B;
+  const root = document.getElementById('root');
+  const next = new URLSearchParams(location.search).get('next');
+
+  function authView(mode) {
+    root.innerHTML = `
+    <div class="auth-wrap">
+      <div class="auth-art">
+        <img src="/img/logo-white.png" alt="">
+        <span class="eyebrow" style="color:var(--gold-soft)">Welcome</span>
+        <h2>Your home for bold <em>African elegance.</em></h2>
+        <p style="color:#d5dcef;max-width:420px">Create an account to check out faster and keep track of all your orders.</p>
+      </div>
+      <div class="auth-form">
+        <form id="f" novalidate>
+          <div class="tabs" role="tablist">
+            <button type="button" class="${mode === 'login' ? 'active' : ''}" data-mode="login">Log in</button>
+            <button type="button" class="${mode === 'register' ? 'active' : ''}" data-mode="register">Create account</button>
+          </div>
+          <h1 class="serif" style="font-size:44px;margin-bottom:24px">${mode === 'login' ? 'Welcome <em>back</em>' : 'Join <em>us</em>'}</h1>
+          <div class="form-err" id="err"></div>
+          ${mode === 'register' ? '<div class="field"><label for="name">Full name</label><input class="input" id="name" autocomplete="name" required></div>' : ''}
+          <div class="field"><label for="email">Email</label><input class="input" id="email" type="email" autocomplete="email" required></div>
+          <div class="field"><label for="password">Password</label><input class="input" id="password" type="password" autocomplete="${mode === 'login' ? 'current-password' : 'new-password'}" required minlength="8" placeholder="${mode === 'register' ? 'At least 8 characters' : ''}"></div>
+          <button class="btn btn-primary btn-block" style="margin-top:8px" id="go">${mode === 'login' ? 'Log in' : 'Create my account'}</button>
+          <p class="muted" style="font-size:13px;text-align:center;margin-top:20px">Forgot your password? <a class="link" style="font-size:11px" target="_blank" rel="noopener" href="${P2B.waLink('Hello, I need help resetting my account password.')}">Contact us</a></p>
+        </form>
+      </div>
+    </div>`;
+    root.querySelectorAll('[data-mode]').forEach(b => b.onclick = () => authView(b.dataset.mode));
+    document.getElementById('f').onsubmit = async e => {
+      e.preventDefault();
+      const err = document.getElementById('err'), go = document.getElementById('go');
+      err.classList.remove('show'); go.disabled = true;
+      const body = { email: document.getElementById('email').value, password: document.getElementById('password').value };
+      if (mode === 'register') body.name = document.getElementById('name').value;
+      try {
+        const r = await api(mode === 'login' ? '/api/login' : '/api/register', { method: 'POST', body });
+        location.href = next || (r.user.isAdmin ? '/admin' : '/account');
+      } catch (ex) { err.textContent = ex.message; err.classList.add('show'); go.disabled = false; }
+    };
+  }
+
+  async function accountView() {
+    root.innerHTML = `
+    <section class="page-banner"><div class="wrap">
+      <div class="crumbs"><a href="/">Home</a> &nbsp;/&nbsp; My account</div>
+      <h1>Hello, <em>${esc(user.name.split(' ')[0])}</em></h1>
+      <p>${esc(user.email)}</p>
+    </div></section>
+    <div class="wrap account-grid" style="margin-top:48px">
+      <div class="panel"><h3>My orders</h3><div id="orders"><p class="muted">Loading…</p></div></div>
+      <div style="display:grid;gap:24px">
+        ${user.isAdmin ? `<div class="panel" style="background:var(--ink);color:#fff;border:0"><h3 style="color:#fff">Shop owner</h3><p style="color:#c9cfdf;margin-top:0">Add, edit and delete products, and manage orders.</p><a class="btn btn-gold btn-block" href="/admin">Open admin dashboard</a></div>` : ''}
+        <div class="panel"><h3>Change password</h3>
+          <form id="pw"><div id="pwmsg"></div>
+            <div class="field"><label for="cur">Current password</label><input class="input" id="cur" type="password" autocomplete="current-password" required></div>
+            <div class="field"><label for="npw">New password</label><input class="input" id="npw" type="password" autocomplete="new-password" minlength="8" required></div>
+            <button class="btn btn-ghost btn-block">Update password</button>
+          </form>
+        </div>
+        <button class="btn btn-ghost" id="logout">Log out</button>
+      </div>
+    </div>`;
+    document.getElementById('logout').onclick = async () => { await api('/api/logout', { method: 'POST' }); location.href = '/'; };
+    document.getElementById('pw').onsubmit = async e => {
+      e.preventDefault(); const m = document.getElementById('pwmsg');
+      try { await api('/api/account/password', { method: 'POST', body: { current: document.getElementById('cur').value, password: document.getElementById('npw').value } }); m.innerHTML = '<div class="form-ok">Password updated.</div>'; e.target.reset(); }
+      catch (ex) { m.innerHTML = `<div class="form-err show">${esc(ex.message)}</div>`; }
+    };
+    const orders = await api('/api/my/orders');
+    document.getElementById('orders').innerHTML = orders.length ? orders.map(o => `
+      <div class="order">
+        <div class="order-head"><b>Order #${o.id}</b><span class="muted">${new Date(o.created_at + 'Z').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}</span><span class="pill ${o.status}">${o.status}</span><b>${money(o.total)}</b></div>
+        <div class="muted" style="font-size:14px">${o.items.map(i => `${i.qty} × ${esc(i.name)}`).join(' · ')}</div>
+      </div>`).join('') : `<p class="muted">You haven't placed any orders yet.</p><a href="/shop" class="btn btn-primary btn-sm">Start shopping</a>`;
+  }
+
+  user ? accountView() : authView(new URLSearchParams(location.search).get('mode') === 'register' ? 'register' : 'login');
+});
+</script>
+</body>
+</html>

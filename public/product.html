@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Product | Proud2bAfricanWoman</title>
+<meta name="theme-color" content="#1b4597">
+<link rel="icon" href="/img/logo-black.png">
+<link rel="preload" href="/fonts/jost-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="css/styles.css">
+</head>
+<body data-page="product">
+<main class="wrap" id="pdp"><div class="pdp"><div class="pdp-media skel"><div class="media" style="height:100%"></div></div><div></div></div></main>
+<section class="wrap block" id="related-wrap" hidden>
+  <div class="sec-head"><h2 class="h-sec">You may also like</h2></div>
+  <div class="grid" id="related"></div>
+</section>
+<script src="js/app.js"></script>
+<script>
+P2B.ready.then(async ({ config }) => {
+  const { esc, money, api } = P2B;
+  const id = new URLSearchParams(location.search).get('id');
+  let p;
+  try { p = await api('/api/products/' + encodeURIComponent(id)); }
+  catch (e) {
+    document.getElementById('pdp').innerHTML = `<div class="empty-state" style="margin:60px 0"><div class="t">This piece is no longer available</div><p class="muted">It may have sold out or been removed.</p><a href="/shop" class="btn btn-primary" style="margin-top:12px">Continue shopping</a></div>`;
+    return;
+  }
+  P2B.remember([p]);
+  document.title = `${p.name} | Proud2bAfricanWoman`;
+  const s = config.settings;
+  let qty = 1;
+  document.getElementById('pdp').innerHTML = `
+  <div class="pdp">
+    <div class="pdp-media" id="zoom"><img src="${esc(p.image || '/img/ndop.jpg')}" alt="${esc(p.name)}"></div>
+    <div class="pdp-info">
+      <div class="crumbs"><a href="/">Home</a> / <a href="/shop?category=${p.category}">${esc(P2B.catName(p.category))}</a></div>
+      <div class="vendor">Proud2bAfricanWoman</div>
+      <h1>${esc(p.name)}</h1>
+      <div class="pdp-price">${money(p.price, true)}</div>
+      <div class="pdp-tax">Tax included. <a href="/info#shipping">Shipping</a> calculated at checkout.</div>
+      <div class="stock ${p.in_stock ? '' : 'out'}">${p.in_stock ? 'In stock, ready to ship' : 'Sold out'}</div>
+      <div class="pdp-actions">
+        ${p.in_stock ? `
+        <div class="pdp-label">Quantity</div>
+        <div class="qty"><button id="qm" aria-label="Decrease quantity">−</button><span id="qv">1</span><button id="qp" aria-label="Increase quantity">+</button></div>
+        <button class="btn btn-outline btn-block" id="add">Add to cart</button>
+        <button class="btn btn-primary btn-block" id="buy">Buy it now</button>` : `<button class="btn btn-outline btn-block" disabled>Sold out</button>`}
+        <a class="btn btn-wa btn-block" target="_blank" rel="noopener" href="${P2B.waLink(`Hello! I'm interested in "${p.name}" (${money(p.price)}). ${location.href}`)}">${P2B.icons.whatsapp.replace('<svg', '<svg width="18" height="18"')} Ask about this on WhatsApp</a>
+      </div>
+      <div class="pdp-desc">${esc(p.description || '')}</div>
+      <details class="acc"><summary>Shipping &amp; delivery</summary><div>UK Royal Mail: ${money(s.shipping_uk)}${s.free_shipping_over ? ` · Free UK delivery over ${money(s.free_shipping_over)}` : ''}<br>Europe: ${money(s.shipping_eu)} · Rest of world: ${money(s.shipping_world)}<br>Orders are dispatched within 1–3 working days.</div></details>
+      <details class="acc"><summary>Secure payment</summary><div>Pay safely with Visa, Mastercard, Amex, Apple Pay or Google Pay. Your card details are handled by Stripe and never stored on our website.</div></details>
+      <details class="acc"><summary>Questions &amp; care</summary><div>For sizing, care or gift questions, message us on WhatsApp and we'll reply personally.</div></details>
+      <div class="share">
+        <a class="icon-btn" target="_blank" rel="noopener" aria-label="Share on Facebook" href="https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(location.href)}">${P2B.icons.facebook}</a>
+        <a class="icon-btn" target="_blank" rel="noopener" aria-label="Share on X" href="https://x.com/intent/post?url=${encodeURIComponent(location.href)}&text=${encodeURIComponent(p.name)}">${P2B.icons.x}</a>
+        <a class="icon-btn" target="_blank" rel="noopener" aria-label="Share on WhatsApp" href="https://wa.me/?text=${encodeURIComponent(p.name + ' ' + location.href)}">${P2B.icons.whatsapp}</a>
+      </div>
+    </div>
+  </div>`;
+  if (p.in_stock) {
+    const qv = document.getElementById('qv');
+    document.getElementById('qm').onclick = () => { qty = Math.max(1, qty - 1); qv.textContent = qty; };
+    document.getElementById('qp').onclick = () => { qty = Math.min(20, qty + 1); qv.textContent = qty; };
+    document.getElementById('add').onclick = () => P2B.addToCart(p, qty);
+    document.getElementById('buy').onclick = () => { P2B.addToCart(p, qty); document.getElementById('checkout-btn').click(); };
+  }
+  const z = document.getElementById('zoom'), zi = z.querySelector('img');
+  z.addEventListener('mousemove', e => { const r = z.getBoundingClientRect(); zi.style.transformOrigin = `${(e.clientX - r.left) / r.width * 100}% ${(e.clientY - r.top) / r.height * 100}%`; zi.style.transform = 'scale(1.8)'; });
+  z.addEventListener('mouseleave', () => { zi.style.transform = ''; });
+
+  let rel = (await api(`/api/products?category=${p.category}&limit=5`)).filter(x => x.id !== p.id);
+  if (rel.length < 4) rel = rel.concat((await api('/api/products?sort=new&limit=8')).filter(x => x.id !== p.id && !rel.some(r => r.id === x.id)));
+  rel = P2B.remember(rel.slice(0, 4));
+  if (rel.length) { document.getElementById('related').innerHTML = rel.map(P2B.productCard).join(''); document.getElementById('related-wrap').hidden = false; }
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Shop | Proud2bAfricanWoman</title>
+<meta name="theme-color" content="#1b4597">
+<link rel="icon" href="/img/logo-black.png">
+<link rel="preload" href="/fonts/jost-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="css/styles.css">
+</head>
+<body data-page="shop">
+<main class="wrap">
+  <div class="coll-head">
+    <div class="crumbs"><a href="/">Home</a> / <a href="/shop">Shop</a><span id="crumb-cat"></span></div>
+    <h1 id="title">All products</h1>
+    <p id="subtitle">Welcome to Proud2bAfricanWoman, your destination for authentic African fabrics and fashion. Every item is carefully selected to celebrate culture, confidence and bold African elegance.</p>
+  </div>
+
+  <div class="coll-tiles"><div class="tiles" id="ctiles"></div></div>
+
+  <div class="toolbar">
+    <div style="display:flex;gap:18px;align-items:center;flex-wrap:wrap">
+      <button class="filter-btn" id="ftoggle"><span id="ficon"></span> Filter</button>
+      <div class="chips" id="chips"></div>
+    </div>
+    <div class="right">
+      <label for="sort">Sort by:</label>
+      <select class="select" id="sort">
+        <option value="featured">Featured</option>
+        <option value="new">Date, new to old</option>
+        <option value="old">Date, old to new</option>
+        <option value="price-asc">Price, low to high</option>
+        <option value="price-desc">Price, high to low</option>
+        <option value="az">Alphabetically, A–Z</option>
+        <option value="za">Alphabetically, Z–A</option>
+      </select>
+      <span class="count" id="count"></span>
+    </div>
+  </div>
+
+  <div class="grid" id="grid">
+    <div class="card skel"><div class="media"></div><div class="line"></div></div><div class="card skel"><div class="media"></div><div class="line"></div></div><div class="card skel"><div class="media"></div><div class="line"></div></div><div class="card skel"><div class="media"></div><div class="line"></div></div>
+  </div>
+</main>
+
+<aside class="drawer left" id="filters" aria-label="Filters" style="z-index:95">
+  <div class="drawer-head"><h3>Filter</h3><button class="icon-btn" data-close aria-label="Close filters"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="m6 6 12 12M18 6 6 18"/></svg></button></div>
+  <div class="drawer-body">
+    <div class="fgroup"><h4>Category</h4><div id="fcats"></div></div>
+    <div class="fgroup"><h4>Price (£)</h4>
+      <div class="price-range"><input class="input" id="pmin" type="number" min="0" placeholder="From" aria-label="Minimum price"><span>–</span><input class="input" id="pmax" type="number" min="0" placeholder="To" aria-label="Maximum price"></div>
+    </div>
+    <div class="fgroup" style="border:0"><h4>Availability</h4><label class="check"><input type="checkbox" id="instock"> In stock only</label></div>
+  </div>
+  <div class="drawer-foot" style="display:flex;gap:10px">
+    <button class="btn btn-outline" id="clear" style="flex:1">Remove all</button>
+    <button class="btn btn-primary" id="apply" style="flex:1">Apply</button>
+  </div>
+</aside>
+
+<script src="js/app.js"></script>
+<script>
+P2B.ready.then(({ config }) => {
+  const { esc, api } = P2B;
+  document.getElementById('ficon').innerHTML = P2B.icons.filter;
+  const params = new URLSearchParams(location.search);
+  const f = { category: params.get('category') || '', q: params.get('q') || '', sort: params.get('sort') || 'featured', min: params.get('min') || '', max: params.get('max') || '', instock: params.get('instock') || '' };
+  const blurbs = {
+    'jewellery': 'Statement earrings, necklaces and adornments — distinctive pieces designed to elevate every moment.',
+    'home-decoration': 'Bring warmth, colour and heritage into every room of your home.',
+    'groceries': 'A taste of home — African pantry staples and favourites.',
+    'clothing': 'Trendy African clothing in premium fabrics, cut to celebrate you.',
+    'kids': 'Joyful African fashion and gifts for the little ones.',
+    'accessories': 'Bags, wraps and finishing touches with a bold African spirit.',
+    'beauty-hair': 'Beauty and hair essentials to care for and celebrate your crown.',
+  };
+  if (params.get('cancelled')) P2B.toast('Payment cancelled — your cart is saved.');
+  const sortEl = document.getElementById('sort'); sortEl.value = f.sort;
+
+  function head() {
+    const c = config.categories.find(c => c.slug === f.category);
+    document.getElementById('title').textContent = c ? c.name : f.q ? `Search: “${f.q}”` : f.sort === 'new' ? 'New in' : 'All products';
+    if (c) document.getElementById('subtitle').textContent = blurbs[c.slug] || '';
+    document.getElementById('crumb-cat').innerHTML = c ? ' / ' + esc(c.name) : '';
+    document.title = `${c ? c.name : 'Shop'} | Proud2bAfricanWoman`;
+    document.querySelectorAll('.catnav a').forEach(a => a.classList.toggle('active', a.getAttribute('href') === `/shop?category=${f.category}`));
+    document.getElementById('ctiles').innerHTML = config.categories.map(x => `
+      <a class="tile ${x.slug === f.category ? 'active' : ''}" href="/shop?category=${x.slug}" data-cat="${x.slug}">
+        <div class="ph"><img src="${esc(x.image || '/img/ndop.jpg')}" alt="" loading="lazy"></div>
+        <div class="lbl">${esc(x.name)} <i>→</i></div></a>`).join('');
+    const total = config.categories.reduce((a, c) => a + c.count, 0);
+    document.getElementById('fcats').innerHTML =
+      `<button class="fcat ${!f.category ? 'active' : ''}" data-fcat=""><span><i class="box"></i>All products</span><small>(${total})</small></button>` +
+      config.categories.map(c => `<button class="fcat ${f.category === c.slug ? 'active' : ''}" data-fcat="${c.slug}"><span><i class="box"></i>${esc(c.name)}</span><small>(${c.count})</small></button>`).join('');
+    const chips = [];
+    if (c) chips.push(['category', c.name]);
+    if (f.q) chips.push(['q', `“${f.q}”`]);
+    if (f.min || f.max) chips.push(['price', `£${f.min || 0} – £${f.max || '∞'}`]);
+    if (f.instock) chips.push(['instock', 'In stock']);
+    document.getElementById('chips').innerHTML = chips.map(([k, l]) => `<button class="chip" data-chip="${k}">${esc(l)} ✕</button>`).join('');
+    document.getElementById('pmin').value = f.min; document.getElementById('pmax').value = f.max;
+    document.getElementById('instock').checked = f.instock === '1';
+  }
+
+  async function load() {
+    const qs = new URLSearchParams(Object.entries(f).filter(([k, v]) => v && !(k === 'sort' && v === 'featured')));
+    history.replaceState(null, '', '/shop' + (qs.toString() ? '?' + qs : ''));
+    head();
+    const list = P2B.remember(await api('/api/products?' + qs));
+    document.getElementById('count').textContent = `${list.length} product${list.length === 1 ? '' : 's'}`;
+    document.getElementById('grid').innerHTML = list.length ? list.map(P2B.productCard).join('') :
+      `<div class="empty-state" style="grid-column:1/-1"><div class="t">New pieces coming soon</div><p class="muted">We're curating this collection right now. Ask us on WhatsApp what's arriving next.</p><a class="btn btn-wa" target="_blank" rel="noopener" href="${P2B.waLink('Hello! What new products are coming soon?')}" style="margin-top:12px">Ask on WhatsApp</a></div>`;
+  }
+
+  document.getElementById('ctiles').addEventListener('click', e => { const t = e.target.closest('[data-cat]'); if (!t) return; e.preventDefault(); f.category = t.dataset.cat === f.category ? '' : t.dataset.cat; load(); });
+  document.getElementById('fcats').addEventListener('click', e => { const b = e.target.closest('[data-fcat]'); if (!b) return; f.category = b.dataset.fcat; document.querySelectorAll('[data-fcat]').forEach(x => x.classList.toggle('active', x === b)); });
+  document.getElementById('chips').addEventListener('click', e => { const b = e.target.closest('[data-chip]'); if (!b) return; const k = b.dataset.chip; if (k === 'price') { f.min = f.max = ''; } else f[k] = ''; load(); });
+  sortEl.addEventListener('change', () => { f.sort = sortEl.value; load(); });
+  document.getElementById('apply').addEventListener('click', () => {
+    f.min = document.getElementById('pmin').value; f.max = document.getElementById('pmax').value;
+    f.instock = document.getElementById('instock').checked ? '1' : ''; P2B.closeDrawers(); load();
+  });
+  document.getElementById('clear').addEventListener('click', () => { Object.assign(f, { category: '', q: '', min: '', max: '', instock: '' }); P2B.closeDrawers(); load(); });
+  document.getElementById('ftoggle').addEventListener('click', () => P2B.openDrawer('filters'));
+  load();
+});
+</script>
+</body>
+</html>
