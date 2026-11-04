@@ -1,0 +1,24 @@
+{
+  "name": "proud2bafricanwoman",
+  "version": "1.0.0",
+  "description": "Proud2bAfricanWoman online shop",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "make-admin": "node make-admin.js"
+  },
+  "dependencies": {
+    "@libsql/client": "^0.18.0",
+    "@vercel/blob": "^2.8.2",
+    "bcryptjs": "^3.0.3",
+    "cookie-session": "^2.1.1",
+    "dotenv": "^18.0.9",
+    "express": "^5.3.0",
+    "multer": "^2.5.0",
+    "stripe": "^23.1.0"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "private": true
+}
