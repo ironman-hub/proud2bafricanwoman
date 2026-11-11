@@ -7,7 +7,11 @@ A complete online shop: product catalogue in 7 categories, customer accounts, ca
 | Area | Features |
 |---|---|
 | **Shop** | Home page, shop page with category / price / stock filters, search and sort, product pages, shopping bag, secure checkout |
-| **Categories** | Jewellery · Home & Decoration · Groceries · Clothing · Kids · Accessories · Beauty & Hair |
+| **Categories** | Jewellery · Home & Decoration · Clothing · Kids · Accessories · Beauty & Hair (Groceries is switched off for now, see below) |
+| **Product options** | Each product can have sizes, colours and material. One choice is just shown; several choices make the customer pick before adding to the bag. The choice shows in the bag, at Stripe checkout, on WhatsApp orders and in Admin → Orders. |
+| **Customer reviews** | `/reviews`: customers upload up to 3 photos of themselves wearing their pieces, with a star rating and a few words. **Nothing is published until the owner approves it in Admin → Reviews.** Approved reviews appear on the Reviews page, on the product page and on the homepage ("Our happy clients"). |
+| **Our Impact** | `/impact`: the brand's mission, commitments and values. Linked in the top menu and footer. |
+| **Languages** | English (default), French, Spanish and German. Visitors choose in the header (or the phone menu); visitors whose browser is in French, Spanish or German are offered their language. Product names, descriptions and reviews stay as written. Translations live in `public/js/i18n-dict.js`. |
 | **Payments** | Stripe Checkout: Visa, Mastercard, Amex, Apple Pay, Google Pay (plus Klarna/PayPal if switched on in Stripe). Shipping address and shipping rates collected at checkout. |
 | **Customers** | Register, log in, order history, change password |
 | **WhatsApp** | Floating chat button on every page, "Ask about this piece" on each product, "Order via WhatsApp" in the bag |
@@ -91,6 +95,14 @@ Vercel runs the site for free on its Hobby plan. Vercel servers don't keep files
 ### Alternative: Render.com
 The same code also runs on Render.com as a normal server (`npm start`). Add a persistent disk mounted at `/var/data` and set `DATA_DIR=/var/data`. Turso and Blob are optional there.
 
+## Switching Groceries back on
+
+Open `server.js`, find the line `// { slug: 'groceries', name: 'Groceries' },` near the top and delete the `//` at the start. Commit the change; Vercel redeploys on its own. While it is off, any grocery products stay in the database (visible in Admin → Products marked "hidden category") but don't show in the shop.
+
+## Editing translations
+
+`public/js/i18n-dict.js` has one row per sentence: `[English, French, Spanish, German]`. Change the text in a column to fix a translation. If you change an English sentence on the website, change the first column of its row to match, or that sentence will stay in English.
+
 ## 4. Hand-over checklist
 
 - [ ] Set a strong `ADMIN_PASSWORD` and a long random `SESSION_SECRET`
@@ -99,6 +111,7 @@ The same code also runs on Render.com as a normal server (`npm start`). Add a pe
 - [ ] Place one test order with `sk_test_` → check it appears in Admin → Orders → switch to `sk_live_`
 - [ ] Delete or replace the 4 starter earrings (they come from the old design mock-up)
 - [ ] Admin → Photos: swap the starter photos for Nelly's own photography when she has it
+- [ ] Admin → Reviews: check for new reviews regularly (a red number shows how many are waiting)
 
 ## About the starter photos
 

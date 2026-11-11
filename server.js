@@ -29,13 +29,17 @@ const stripe = process.env.STRIPE_SECRET_KEY
 const CATEGORIES = [
   { slug: 'jewellery', name: 'Jewellery' },
   { slug: 'home-decoration', name: 'Home & Decoration' },
-  { slug: 'groceries', name: 'Groceries' },
+  // { slug: 'groceries', name: 'Groceries' }, // Hidden for now. Remove the // at the start of this line to show Groceries again.
   { slug: 'clothing', name: 'Clothing' },
   { slug: 'kids', name: 'Kids' },
   { slug: 'accessories', name: 'Accessories' },
   { slug: 'beauty-hair', name: 'Beauty & Hair' },
 ];
 const CAT_SLUGS = new Set(CATEGORIES.map(c => c.slug));
+const CAT_SQL = `category IN (${CATEGORIES.map(() => '?').join(',')})`; // products in hidden categories stay off the shop
+const CAT_ARGS = CATEGORIES.map(c => c.slug);
+// Product options the admin can set per product (stored as JSON lists)
+const OPTIONS = [{ key: 'sizes', label: 'Size' }, { key: 'colours', label: 'Colour' }, { key: 'materials', label: 'Material' }];
 
 // ---------- Database ----------
 const DB_URL = process.env.TURSO_DATABASE_URL || envBySuffix('DATABASE_URL', v => /^(libsql|https?|wss?):/.test(v)) || (ON_VERCEL ? null : 'file:' + path.join(DATA_DIR, 'shop.db'));
@@ -83,6 +87,21 @@ CREATE TABLE IF NOT EXISTS orders (
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT);
+CREATE TABLE IF NOT EXISTS reviews (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  product_id INTEGER,
+  user_id INTEGER,
+  name TEXT NOT NULL,
+  email TEXT,
+  location TEXT,
+  rating INTEGER NOT NULL DEFAULT 5,
+  body TEXT NOT NULL,
+  images TEXT NOT NULL DEFAULT '[]',
+  status TEXT NOT NULL DEFAULT 'pending',
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  reviewed_at TEXT
+);
+CREATE INDEX IF NOT EXISTS reviews_status ON reviews (status, id);
 CREATE TABLE IF NOT EXISTS subscribers (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   email TEXT NOT NULL UNIQUE COLLATE NOCASE,
@@ -128,6 +147,9 @@ Object.assign(DEFAULT_SETTINGS, DEFAULT_IMAGES);
 async function init() {
   if (!client) throw new Error('No database connected. On Vercel, add the Turso database integration (see README).');
   await client.executeMultiple(SCHEMA);
+  // Add the size / colour / material columns to shops created before they existed
+  const cols = new Set((await db.all('PRAGMA table_info(products)')).map(c => c.name));
+  for (const o of OPTIONS) if (!cols.has(o.key)) await db.run(`ALTER TABLE products ADD COLUMN ${o.key} TEXT NOT NULL DEFAULT '[]'`);
   await client.batch(Object.entries(DEFAULT_SETTINGS).map(([k, v]) => ({ sql: 'INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)', args: [k, v] })), 'write');
   if (process.env.ADMIN_EMAIL && process.env.ADMIN_PASSWORD) {
     const email = process.env.ADMIN_EMAIL.trim().toLowerCase();
@@ -231,15 +253,22 @@ const cleanEmail = e => String(e || '').trim().toLowerCase();
 const validEmail = e => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e);
 const toPence = v => { const n = Math.round(parseFloat(String(v).replace(/[^0-9.]/g, '')) * 100); return Number.isFinite(n) && n > 0 ? n : null; };
 const imgUrl = i => !i ? null : /^(https?:)?\//.test(i) ? i : '/uploads/' + i; // older local rows stored only the file name
-const productOut = p => p && ({ ...p, in_stock: !!p.in_stock, featured: !!p.featured, image: imgUrl(p.image) });
+const parseJSON = (v, d) => { try { const x = JSON.parse(v); return x == null ? d : x; } catch (e) { return d; } };
+const productOut = p => p && ({ ...p, in_stock: !!p.in_stock, featured: !!p.featured, image: imgUrl(p.image),
+  ...Object.fromEntries(OPTIONS.map(o => [o.key, parseJSON(p[o.key], [])])) });
+// "S, M, L" or one per line -> ["S","M","L"]
+const parseList = v => JSON.stringify([...new Set(String(v || '').split(/[,\n]/).map(x => x.trim().slice(0, 60)).filter(Boolean))].slice(0, 40));
+const isHiddenCat = slug => !CAT_SLUGS.has(slug);
 
 const attempts = new Map();
-const rateLimit = (req, res, next) => {
-  const key = req.ip; const now = Date.now();
-  const list = (attempts.get(key) || []).filter(t => now - t < 15 * 60 * 1000);
-  if (list.length >= 20) return res.status(429).json({ error: 'Too many attempts. Please wait a few minutes.' });
+const limiter = (name, max, windowMs) => (req, res, next) => {
+  const key = name + ':' + req.ip; const now = Date.now();
+  const list = (attempts.get(key) || []).filter(t => now - t < windowMs);
+  if (list.length >= max) return res.status(429).json({ error: 'Too many attempts. Please wait a few minutes.' });
   list.push(now); attempts.set(key, list); next();
 };
+const rateLimit = limiter('auth', 20, 15 * 60 * 1000);
+const reviewLimit = limiter('review', 5, 60 * 60 * 1000);
 
 // ---------- Public API ----------
 app.get('/api/config', h(async (req, res) => {
@@ -262,6 +291,9 @@ app.get('/api/config', h(async (req, res) => {
 
 app.get('/api/products', h(async (req, res) => {
   const where = []; const args = [];
+  // The admin dashboard asks for everything (all=1), including products in hidden categories
+  const showAll = req.query.all === '1' && (await currentUser(req) || {}).is_admin;
+  if (!showAll) { where.push(CAT_SQL); args.push(...CAT_ARGS); }
   if (req.query.category && CAT_SLUGS.has(req.query.category)) { where.push('category = ?'); args.push(req.query.category); }
   if (req.query.q) { where.push('(name LIKE ? OR description LIKE ?)'); args.push(`%${req.query.q}%`, `%${req.query.q}%`); }
   if (req.query.min) { where.push('price >= ?'); args.push(Math.round(+req.query.min * 100) || 0); }
@@ -277,7 +309,7 @@ app.get('/api/products', h(async (req, res) => {
 
 app.get('/api/products/:id', h(async (req, res) => {
   const p = await db.get('SELECT * FROM products WHERE id = ?', [req.params.id]);
-  if (!p) return res.status(404).json({ error: 'Product not found' });
+  if (!p || (isHiddenCat(p.category) && !(await currentUser(req) || {}).is_admin)) return res.status(404).json({ error: 'Product not found' });
   res.json(productOut(p));
 }));
 
@@ -337,9 +369,19 @@ app.post('/api/checkout', h(async (req, res) => {
   for (const it of cart.slice(0, 50)) {
     const p = await db.get('SELECT * FROM products WHERE id = ?', [it.id]);
     const qty = Math.max(1, Math.min(20, parseInt(it.qty) || 1));
-    if (!p) continue;
+    if (!p || isHiddenCat(p.category)) continue;
     if (!p.in_stock) return res.status(400).json({ error: `Sorry, "${p.name}" is sold out.` });
-    items.push({ id: p.id, name: p.name, price: p.price, qty, image: imgUrl(p.image) });
+    // Check the chosen size / colour / material against what the admin set for this product
+    const chosen = (it.options && typeof it.options === 'object') ? it.options : {};
+    const options = {};
+    for (const o of OPTIONS) {
+      const list = parseJSON(p[o.key], []);
+      if (!list.length) continue;
+      const v = list.length === 1 ? list[0] : list.find(x => x === String(chosen[o.label] || ''));
+      if (!v) return res.status(400).json({ error: `Please choose a ${o.label.toLowerCase()} for "${p.name}".` });
+      options[o.label] = v;
+    }
+    items.push({ id: p.id, name: p.name, price: p.price, qty, image: imgUrl(p.image), ...(Object.keys(options).length ? { options } : {}) });
   }
   if (!items.length) return res.status(400).json({ error: 'These products are no longer available.' });
 
@@ -368,7 +410,7 @@ app.post('/api/checkout', h(async (req, res) => {
         quantity: i.qty,
         price_data: {
           currency: CURRENCY, unit_amount: i.price,
-          product_data: { name: i.name, ...(i.image && absImg(i.image).startsWith('https') ? { images: [absImg(i.image)] } : {}) },
+          product_data: { name: i.name, ...(i.options ? { description: Object.entries(i.options).map(([k, v]) => `${k}: ${v}`).join(' · ') } : {}), ...(i.image && absImg(i.image).startsWith('https') ? { images: [absImg(i.image)] } : {}) },
         },
       })),
       shipping_address_collection: { allowed_countries: (process.env.SHIP_COUNTRIES || 'GB,IE,FR,DE,NL,BE,ES,IT,PT,US,CA,ZA,NG,GH,KE,ZW').split(',') },
@@ -418,6 +460,49 @@ app.get('/api/checkout/confirm', h(async (req, res) => {
   res.json({ paid: true, order: { id: order.id, total: order.total, items: JSON.parse(order.items), email: order.email } });
 }));
 
+// ---------- Customer reviews (published only after the admin approves them) ----------
+const reviewUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 4 * 1024 * 1024, files: 3 },
+  fileFilter: (req, file, cb) => cb(null, /^image\/(jpeg|png|webp)$/.test(file.mimetype)),
+});
+const reviewOut = r => ({
+  id: r.id, name: r.name, location: r.location || '', rating: r.rating, body: r.body, images: parseJSON(r.images, []),
+  product_id: r.product_id, product_name: r.product_name || null, created_at: r.created_at,
+});
+const REVIEW_SELECT = 'SELECT r.*, p.name AS product_name FROM reviews r LEFT JOIN products p ON p.id = r.product_id';
+
+app.get('/api/reviews', h(async (req, res) => {
+  const where = ["r.status = 'approved'"]; const args = [];
+  if (req.query.product) { where.push('r.product_id = ?'); args.push(parseInt(req.query.product) || 0); }
+  if (req.query.photos === '1') where.push("r.images != '[]'");
+  const limit = Math.min(parseInt(req.query.limit) || 60, 200);
+  const rows = await db.all(`${REVIEW_SELECT} WHERE ${where.join(' AND ')} ORDER BY r.reviewed_at DESC, r.id DESC LIMIT ${limit}`, args);
+  const sum = await db.get(`SELECT COUNT(*) n, AVG(rating) avg FROM reviews r WHERE ${where.filter(w => !w.includes('images')).join(' AND ')}`, args.slice(0, req.query.product ? 1 : 0));
+  res.json({ count: sum.n, average: sum.avg ? Math.round(sum.avg * 10) / 10 : null, reviews: rows.map(reviewOut) });
+}));
+
+app.post('/api/reviews', reviewLimit, reviewUpload.array('photos', 3), h(async (req, res) => {
+  if (req.body.website) return res.json({ ok: true }); // hidden field that only spam bots fill in
+  const name = String(req.body.name || '').trim().slice(0, 60);
+  const body = String(req.body.body || '').trim().slice(0, 2000);
+  const location = String(req.body.location || '').trim().slice(0, 60);
+  const email = cleanEmail(req.body.email);
+  const rating = Math.max(1, Math.min(5, parseInt(req.body.rating) || 5));
+  if (!name) return res.status(400).json({ error: 'Please enter your name.' });
+  if (body.length < 10) return res.status(400).json({ error: 'Please write a few words about your purchase (at least 10 characters).' });
+  if (email && !validEmail(email)) return res.status(400).json({ error: 'Please enter a valid email address, or leave it empty.' });
+  if (req.body.consent !== 'true') return res.status(400).json({ error: 'Please tick the box to agree that we may show your review and photos.' });
+  let productId = parseInt(req.body.product_id) || null;
+  if (productId && !(await db.get('SELECT id FROM products WHERE id = ?', [productId]))) productId = null;
+  const images = [];
+  for (const f of req.files || []) images.push(await storeImage(f, 'reviews'));
+  const user = await currentUser(req);
+  await db.run('INSERT INTO reviews (product_id, user_id, name, email, location, rating, body, images) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+    [productId, user ? user.id : null, name, email || (user ? user.email : null), location, rating, body, JSON.stringify(images)]);
+  res.json({ ok: true });
+}));
+
 // ---------- Admin API ----------
 app.post('/api/admin/products', requireAdmin, upload.single('image'), h(async (req, res) => {
   const { name, description = '', category } = req.body;
@@ -427,8 +512,9 @@ app.post('/api/admin/products', requireAdmin, upload.single('image'), h(async (r
   if (!CAT_SLUGS.has(category)) return res.status(400).json({ error: 'Choose a category.' });
   if (!req.file) return res.status(400).json({ error: 'Please add a product photo (JPG, PNG or WEBP).' });
   const image = await storeImage(req.file, 'products');
-  const info = await db.run('INSERT INTO products (name, description, price, category, image, in_stock, featured) VALUES (?, ?, ?, ?, ?, ?, ?)',
-    [String(name).trim(), String(description).trim(), price, category, image, req.body.in_stock === 'false' ? 0 : 1, req.body.featured === 'true' ? 1 : 0]);
+  const info = await db.run('INSERT INTO products (name, description, price, category, image, in_stock, featured, sizes, colours, materials) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    [String(name).trim(), String(description).trim(), price, category, image, req.body.in_stock === 'false' ? 0 : 1, req.body.featured === 'true' ? 1 : 0,
+      parseList(req.body.sizes), parseList(req.body.colours), parseList(req.body.materials)]);
   res.json(productOut(await db.get('SELECT * FROM products WHERE id = ?', [info.lastInsertRowid])));
 }));
 
@@ -438,13 +524,14 @@ app.put('/api/admin/products/:id', requireAdmin, upload.single('image'), h(async
   const name = req.body.name != null ? String(req.body.name).trim() : p.name;
   const price = req.body.price != null ? toPence(req.body.price) : p.price;
   const category = req.body.category != null ? req.body.category : p.category;
-  if (!name || !price || !CAT_SLUGS.has(category)) return res.status(400).json({ error: 'Check the name, price and category.' });
+  if (!name || !price || (!CAT_SLUGS.has(category) && category !== p.category)) return res.status(400).json({ error: 'Check the name, price and category.' });
   let image = p.image;
   if (req.file) { image = await storeImage(req.file, 'products'); await removeImage(imgUrl(p.image)); }
   await db.run('UPDATE products SET name = ?, description = ?, price = ?, category = ?, image = ?, in_stock = ?, featured = ? WHERE id = ?',
     [name, req.body.description != null ? String(req.body.description).trim() : p.description, price, category, image,
       req.body.in_stock != null ? (req.body.in_stock === 'false' ? 0 : 1) : p.in_stock,
       req.body.featured != null ? (req.body.featured === 'true' ? 1 : 0) : p.featured, p.id]);
+  for (const o of OPTIONS) if (req.body[o.key] != null) await db.run(`UPDATE products SET ${o.key} = ? WHERE id = ?`, [parseList(req.body[o.key]), p.id]);
   res.json(productOut(await db.get('SELECT * FROM products WHERE id = ?', [p.id])));
 }));
 
@@ -476,6 +563,7 @@ app.get('/api/admin/stats', requireAdmin, h(async (req, res) => {
     orders: await n("SELECT COUNT(*) n FROM orders WHERE status IN ('paid','shipped')"),
     toShip: await n("SELECT COUNT(*) n FROM orders WHERE status = 'paid'"),
     revenue: await n("SELECT COALESCE(SUM(total),0) n FROM orders WHERE status IN ('paid','shipped')"),
+    pendingReviews: await n("SELECT COUNT(*) n FROM reviews WHERE status = 'pending'"),
     paymentsEnabled: !!stripe,
     photosEnabled: USE_BLOB || !ON_VERCEL,
   });
@@ -521,11 +609,32 @@ app.put('/api/admin/settings', requireAdmin, h(async (req, res) => {
   res.json(await getSettings());
 }));
 
+// Reviews waiting for approval, approved and hidden
+app.get('/api/admin/reviews', requireAdmin, h(async (req, res) => {
+  const status = ['pending', 'approved', 'rejected'].includes(req.query.status) ? req.query.status : null;
+  const rows = await db.all(`${REVIEW_SELECT} ${status ? 'WHERE r.status = ?' : ''} ORDER BY r.id DESC LIMIT 500`, status ? [status] : []);
+  res.json(rows.map(r => ({ ...reviewOut(r), email: r.email, status: r.status })));
+}));
+app.patch('/api/admin/reviews/:id', requireAdmin, h(async (req, res) => {
+  const status = String(req.body.status || '');
+  if (!['pending', 'approved', 'rejected'].includes(status)) return res.status(400).json({ error: 'Invalid status' });
+  const r = await db.run("UPDATE reviews SET status = ?, reviewed_at = datetime('now') WHERE id = ?", [status, req.params.id]);
+  if (!r.changes) return res.status(404).json({ error: 'Not found' });
+  res.json({ ok: true });
+}));
+app.delete('/api/admin/reviews/:id', requireAdmin, h(async (req, res) => {
+  const r = await db.get('SELECT * FROM reviews WHERE id = ?', [req.params.id]);
+  if (!r) return res.status(404).json({ error: 'Not found' });
+  await db.run('DELETE FROM reviews WHERE id = ?', [r.id]);
+  for (const u of parseJSON(r.images, [])) await removeImage(u);
+  res.json({ ok: true });
+}));
+
 app.use('/api', (req, res) => res.status(404).json({ error: 'Not found' }));
 
 // Errors
 app.use((err, req, res, next) => {
-  if (err instanceof multer.MulterError) return res.status(400).json({ error: err.code === 'LIMIT_FILE_SIZE' ? 'Photo is too large (max 4MB). Try a smaller photo.' : err.message });
+  if (err instanceof multer.MulterError) return res.status(400).json({ error: err.code === 'LIMIT_FILE_SIZE' ? 'Photo is too large (max 4MB). Try a smaller photo.' : /LIMIT_(FILE_COUNT|UNEXPECTED_FILE)/.test(err.code) ? 'You can add up to 3 photos.' : err.message });
   console.error(err);
   res.status(500).json({ error: err.message && /storage is not connected/.test(err.message) ? err.message : 'Something went wrong.' });
 });
