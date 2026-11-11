@@ -10,7 +10,7 @@
 <link rel="preload" href="/fonts/cormorant-garamond-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="css/styles.css">
 </head>
-<body data-layout="none">
+<body data-layout="none" data-i18n="off">
 <div class="admin" id="app" hidden>
   <aside class="admin-side">
     <a href="/" class="brand"><img src="/img/logo-white.png" alt="" style="height:38px"><b>Proud2b<i style="color:var(--gold-soft)">African</i>Woman</b></a>
@@ -18,6 +18,7 @@
       <button data-tab="overview" class="active"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg><span>Overview</span></button>
       <button data-tab="products"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M5 8h14l-1 13H6L5 8Z"/><path d="M9 8V6a3 3 0 0 1 6 0v2"/></svg><span>Products</span></button>
       <button data-tab="photos"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="m21 16-5-5-9 9"/></svg><span>Photos</span></button>
+      <button data-tab="reviews"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="m12 3 2.6 5.6 6 .7-4.5 4.1 1.2 6L12 16.4 6.7 19.4l1.2-6L3.4 9.3l6-.7L12 3Z"/></svg><span>Reviews</span><i class="badge" id="rev-badge" hidden></i></button>
       <button data-tab="orders"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M4 7h16v13H4zM4 7l2-3h12l2 3M9 11h6"/></svg><span>Orders</span></button>
       <button data-tab="customers"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c1-3.5 3.5-5 6.5-5s5.5 1.5 6.5 5M16 4.5a3.5 3.5 0 0 1 0 7M18 15c2 .6 3.2 2.2 3.6 5"/></svg><span>Customers</span></button>
       <button data-tab="settings"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z"/></svg><span>Settings</span></button>
@@ -75,11 +76,13 @@ P2B.ready.then(({ user, config }) => {
   // ---------- Overview ----------
   async function overview() {
     const s = await api('/api/admin/stats');
+    setBadge(s.pendingReviews);
     const orders = (await api('/api/admin/orders')).slice(0, 6);
     main.innerHTML = `
       <div class="admin-top"><div><span class="eyebrow">Dashboard</span><h1>Welcome, <em>${esc(user.name.split(' ')[0])}</em></h1></div>
         <button class="btn btn-primary" data-goto="products">+ Add a product</button></div>
       ${payWarn}
+      ${s.pendingReviews ? `<div class="alert"><b>${s.pendingReviews} new review${s.pendingReviews === 1 ? '' : 's'} waiting for approval.</b> <a href="#reviews" data-goto="reviews" style="text-decoration:underline">Check them now</a></div>` : ''}
       ${s.photosEnabled === false ? '<div class="alert"><b>Photo uploads are not switched on yet.</b> In Vercel, open this project → Storage → create a <b>Blob</b> store and connect it, then redeploy.</div>' : ''}
       <div class="stats">
         <div class="stat"><span>Revenue</span><b>${money(s.revenue)}</b></div>
@@ -106,6 +109,13 @@ P2B.ready.then(({ user, config }) => {
         <div class="field"><label for="pprice">Price (£)</label><input class="input" id="pprice" name="price" inputmode="decimal" required value="${p ? (p.price / 100).toFixed(2) : ''}" placeholder="12.99"></div>
         <div class="field"><label for="pcat">Category</label><select class="select" id="pcat" name="category" required><option value="">Choose…</option>${cats.map(c => `<option value="${c.slug}" ${p && p.category === c.slug ? 'selected' : ''}>${esc(c.name)}</option>`).join('')}</select></div>
       </div>
+      <div class="opt-box">
+        <b>Options customers choose from</b>
+        <p class="muted">Separate choices with commas. Leave a box empty if it doesn't apply. With one choice it is just shown on the product page; with several, the customer must pick one.</p>
+        <div class="field"><label for="psizes">Sizes</label><input class="input" id="psizes" value="${esc(p ? (p.sizes || []).join(', ') : '')}" placeholder="e.g. S, M, L, XL  or  UK 8, UK 10, UK 12"></div>
+        <div class="field"><label for="pcolours">Colours</label><input class="input" id="pcolours" value="${esc(p ? (p.colours || []).join(', ') : '')}" placeholder="e.g. Gold, Silver, Indigo"></div>
+        <div class="field" style="margin-bottom:0"><label for="pmaterials">Material</label><input class="input" id="pmaterials" value="${esc(p ? (p.materials || []).join(', ') : '')}" placeholder="e.g. 100% cotton Ankara  or  Brass, Wood"></div>
+      </div>
       <div class="field"><label for="pdesc">Description</label><textarea class="input" id="pdesc" name="description" placeholder="Tell customers what makes this piece special — materials, size, care…">${esc(p ? p.description : '')}</textarea></div>
       <div style="display:flex;gap:22px;margin:4px 0 20px;flex-wrap:wrap">
         <label class="check"><input type="checkbox" id="pstock" ${!p || p.in_stock ? 'checked' : ''}> In stock</label>
@@ -123,14 +133,14 @@ P2B.ready.then(({ user, config }) => {
     document.getElementById('plist').innerHTML = list.length ? list.map(p => `
       <div class="prod-row">
         <img src="${esc(p.image || '/img/ndop.jpg')}" alt="">
-        <div><h4>${esc(p.name)}</h4><small>${esc(catName(p.category))} · ${p.in_stock ? 'In stock' : '<b style="color:var(--danger)">Sold out</b>'}${p.featured ? ' · ★ Featured' : ''}</small></div>
+        <div><h4>${esc(p.name)}</h4><small>${esc(catName(p.category))}${cats.some(c => c.slug === p.category) ? '' : ' (hidden category)'} · ${[p.sizes, p.colours, p.materials].some(l => l && l.length) ? [['Sizes', p.sizes], ['Colours', p.colours], ['Material', p.materials]].filter(([, l]) => l && l.length).map(([k, l]) => `${k}: ${esc(l.join(', '))}`).join(' · ') + ' · ' : ''}${p.in_stock ? 'In stock' : '<b style="color:var(--danger)">Sold out</b>'}${p.featured ? ' · ★ Featured' : ''}</small></div>
         <div class="price">${money(p.price)}</div>
         <div class="row-actions"><button data-edit="${p.id}">Edit</button><button data-stock="${p.id}">${p.in_stock ? 'Mark sold out' : 'Back in stock'}</button><button class="del" data-del="${p.id}">Delete</button></div>
       </div>`).join('') : '<div class="empty-state"><div class="serif" style="font-size:28px">No products here yet</div><p class="muted">Use the form to add your first one.</p></div>';
   }
 
   async function productsTab() {
-    products = await api('/api/products?sort=new&limit=500');
+    products = await api('/api/products?sort=new&limit=500&all=1');
     main.innerHTML = `
       <div class="admin-top"><div><span class="eyebrow">Catalogue</span><h1>Products</h1></div><span class="muted">${products.length} product${products.length === 1 ? '' : 's'} live</span></div>
       <div class="admin-split">
@@ -169,6 +179,7 @@ P2B.ready.then(({ user, config }) => {
       fd.append('description', document.getElementById('pdesc').value);
       fd.append('in_stock', document.getElementById('pstock').checked ? 'true' : 'false');
       fd.append('featured', document.getElementById('pfeat').checked ? 'true' : 'false');
+      ['sizes', 'colours', 'materials'].forEach(k => fd.append(k, document.getElementById('p' + k).value));
       if (inp.files[0]) fd.append('image', await shrink(inp.files[0]));
       btn.disabled = true; btn.textContent = 'Saving…';
       try {
@@ -213,13 +224,57 @@ P2B.ready.then(({ user, config }) => {
     catch (ex) { toast(esc(ex.message), true); }
   });
 
+  // ---------- Reviews (customer photos are only published after approval) ----------
+  function setBadge(n) { const b = document.getElementById('rev-badge'); b.textContent = n || ''; b.hidden = !n; }
+  let revFilter = 'pending';
+  async function reviewsTab() {
+    const all = await api('/api/admin/reviews');
+    const counts = { pending: 0, approved: 0, rejected: 0 }; all.forEach(r => counts[r.status]++);
+    setBadge(counts.pending);
+    const list = all.filter(r => r.status === revFilter);
+    const labels = { pending: 'Waiting for approval', approved: 'Published', rejected: 'Hidden' };
+    main.innerHTML = `<div class="admin-top"><div><span class="eyebrow">Happy clients</span><h1>Reviews</h1></div></div>
+      <p class="muted" style="margin-top:-14px;margin-bottom:22px">Customers send their photos and reviews from the <a href="/reviews" target="_blank" style="text-decoration:underline">Reviews page</a>. Nothing appears on the website until you click <b>Approve</b>.</p>
+      <div class="rev-filter">${Object.keys(labels).map(k => `<button class="chip ${k === revFilter ? 'on' : ''}" data-revf="${k}">${labels[k]} (${counts[k]})</button>`).join('')}</div>
+      ${list.length ? `<div class="rev-admin">${list.map(r => `
+        <div class="panel rev-item">
+          ${r.images.length ? `<div class="rev-photos">${r.images.map(u => `<a href="${esc(u)}" target="_blank" rel="noopener"><img src="${esc(u)}" alt="Customer photo"></a>`).join('')}</div>` : '<div class="muted" style="font-size:13px;margin-bottom:12px">No photos</div>'}
+          <div>${P2B.stars(r.rating)}</div>
+          <p style="white-space:pre-line;margin:10px 0">${esc(r.body)}</p>
+          <div style="font-size:14px"><b>${esc(r.name)}</b>${r.location ? ' · ' + esc(r.location) : ''}</div>
+          ${r.email ? `<div style="font-size:13px"><a class="muted" href="mailto:${esc(r.email)}">${esc(r.email)}</a></div>` : ''}
+          ${r.product_name ? `<div class="muted" style="font-size:13px">Product: ${esc(r.product_name)}</div>` : ''}
+          <div class="muted" style="font-size:12.5px">Sent ${date(r.created_at)}</div>
+          <div class="row-actions" style="margin-top:14px">
+            ${r.status !== 'approved' ? `<button data-revs="approved" data-rid="${r.id}" class="ok">Approve &amp; publish</button>` : ''}
+            ${r.status !== 'rejected' ? `<button data-revs="rejected" data-rid="${r.id}">${r.status === 'approved' ? 'Unpublish' : 'Hide'}</button>` : ''}
+            <button class="del" data-revdel="${r.id}">Delete</button>
+          </div>
+        </div>`).join('')}</div>` : `<div class="empty-state"><div class="serif" style="font-size:28px">Nothing here</div><p class="muted">${revFilter === 'pending' ? 'New reviews from customers will appear here for you to approve.' : 'No reviews in this list.'}</p></div>`}`;
+  }
+  document.addEventListener('click', async e => {
+    const f = e.target.closest('[data-revf]');
+    if (f) { revFilter = f.dataset.revf; reviewsTab(); return; }
+    const s = e.target.closest('[data-revs]');
+    if (s) {
+      try { await api('/api/admin/reviews/' + s.dataset.rid, { method: 'PATCH', body: { status: s.dataset.revs } }); toast(s.dataset.revs === 'approved' ? 'Review published on the website ✓' : 'Review hidden from the website'); reviewsTab(); }
+      catch (ex) { toast(esc(ex.message), true); }
+      return;
+    }
+    const d = e.target.closest('[data-revdel]');
+    if (d && await confirmBox('Delete this review?', 'The review and its photos will be removed permanently. This can\'t be undone.')) {
+      try { await api('/api/admin/reviews/' + d.dataset.revdel, { method: 'DELETE' }); toast('Review deleted'); reviewsTab(); }
+      catch (ex) { toast(esc(ex.message), true); }
+    }
+  });
+
   // ---------- Orders ----------
   function ordersTable(orders) {
     return `<div class="tbl-wrap"><table class="tbl"><thead><tr><th>Order</th><th>Customer</th><th>Items</th><th>Total</th><th>Status</th></tr></thead><tbody>
       ${orders.map(o => `<tr>
         <td><b>#${o.id}</b><br><small class="muted">${date(o.created_at)}</small></td>
         <td>${esc(o.customer_name || '')}<br><small class="muted">${esc(o.email || '')}</small>${o.address ? `<br><small class="muted">${esc(o.address)}</small>` : ''}</td>
-        <td>${o.items.map(i => `${i.qty} × ${esc(i.name)}`).join('<br>')}</td>
+        <td>${o.items.map(i => `${i.qty} × ${esc(i.name)}${i.options ? `<br><small class="muted">${esc(Object.entries(i.options).map(([k, v]) => k + ': ' + v).join(' · '))}</small>` : ''}`).join('<br>')}</td>
         <td><b>${money(o.total)}</b>${o.shipping ? `<br><small class="muted">incl. ${money(o.shipping)} shipping</small>` : ''}</td>
         <td><select class="select" data-status="${o.id}" aria-label="Order status">${['paid', 'shipped', 'cancelled'].map(s => `<option value="${s}" ${o.status === s ? 'selected' : ''}>${s[0].toUpperCase() + s.slice(1)}</option>`).join('')}</select></td>
       </tr>`).join('')}</tbody></table></div>`;
@@ -278,7 +333,7 @@ P2B.ready.then(({ user, config }) => {
     };
   }
 
-  const tabs = { overview, products: productsTab, photos: photosTab, orders: ordersTab, customers: customersTab, settings: settingsTab };
+  const tabs = { overview, products: productsTab, reviews: reviewsTab, photos: photosTab, orders: ordersTab, customers: customersTab, settings: settingsTab };
   function go(tab) {
     document.querySelectorAll('[data-tab]').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
     main.innerHTML = '<p class="muted">Loading…</p>';

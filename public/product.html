@@ -4,21 +4,27 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Product | Proud2bAfricanWoman</title>
-<meta name="theme-color" content="#1b4597">
+<meta name="theme-color" content="#2d6cc9">
 <link rel="icon" href="/img/logo-black.png">
 <link rel="preload" href="/fonts/jost-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="css/styles.css">
 </head>
 <body data-page="product">
 <main class="wrap" id="pdp"><div class="pdp"><div class="pdp-media skel"><div class="media" style="height:100%"></div></div><div></div></div></main>
+<section class="wrap block" id="reviews-wrap" hidden>
+  <div class="sec-head"><div><h2 class="h-sec">Customer reviews</h2><div id="rev-sum" style="margin-top:8px"></div></div><a class="btn btn-outline btn-sm" id="rev-write" href="/reviews#write">Share your look</a></div>
+  <div class="reviews-grid" id="p-reviews"></div>
+</section>
 <section class="wrap block" id="related-wrap" hidden>
   <div class="sec-head"><h2 class="h-sec">You may also like</h2></div>
   <div class="grid" id="related"></div>
 </section>
+<script src="js/i18n-dict.js"></script>
+<script src="js/i18n.js"></script>
 <script src="js/app.js"></script>
 <script>
 P2B.ready.then(async ({ config }) => {
-  const { esc, money, api } = P2B;
+  const { esc, money, api, t } = P2B;
   const id = new URLSearchParams(location.search).get('id');
   let p;
   try { p = await api('/api/products/' + encodeURIComponent(id)); }
@@ -30,16 +36,27 @@ P2B.ready.then(async ({ config }) => {
   document.title = `${p.name} | Proud2bAfricanWoman`;
   const s = config.settings;
   let qty = 1;
+  // Size / colour / material: a choice when there are several, plain text when there is only one
+  const OPTS = [['sizes', 'Size'], ['colours', 'Colour'], ['materials', 'Material']].filter(([k]) => (p[k] || []).length);
+  const chosen = {};
+  OPTS.forEach(([k, label]) => { if (p[k].length === 1) chosen[label] = p[k][0]; });
+  const optionsHtml = OPTS.map(([k, label]) => p[k].length === 1
+    ? `<div class="opt-fixed"><span>${t(label + ':')}</span> <b translate="no">${esc(p[k][0])}</b></div>`
+    : `<div class="opt-group" role="radiogroup" aria-label="${esc(t(label))}" data-opt="${label}">
+        <div class="pdp-label">${t(label + ':')} <b class="opt-val"></b></div>
+        <div class="opts">${p[k].map(v => `<button type="button" class="opt" role="radio" aria-checked="false" data-v="${esc(v)}" translate="no">${esc(v)}</button>`).join('')}</div>
+      </div>`).join('');
   document.getElementById('pdp').innerHTML = `
   <div class="pdp">
     <div class="pdp-media" id="zoom"><img src="${esc(p.image || '/img/ndop.jpg')}" alt="${esc(p.name)}"></div>
     <div class="pdp-info">
       <div class="crumbs"><a href="/">Home</a> / <a href="/shop?category=${p.category}">${esc(P2B.catName(p.category))}</a></div>
       <div class="vendor">Proud2bAfricanWoman</div>
-      <h1>${esc(p.name)}</h1>
+      <h1 translate="no">${esc(p.name)}</h1>
       <div class="pdp-price">${money(p.price, true)}</div>
-      <div class="pdp-tax">Tax included. <a href="/info#shipping">Shipping</a> calculated at checkout.</div>
-      <div class="stock ${p.in_stock ? '' : 'out'}">${p.in_stock ? 'In stock, ready to ship' : 'Sold out'}</div>
+      <div class="pdp-tax">${t('Tax included. <a href="/info#shipping">Shipping</a> calculated at checkout.')}</div>
+      <div class="stock ${p.in_stock ? '' : 'out'}">${p.in_stock ? t('In stock, ready to ship') : t('Sold out')}</div>
+      ${optionsHtml ? `<div class="pdp-opts">${optionsHtml}</div>` : ''}
       <div class="pdp-actions">
         ${p.in_stock ? `
         <div class="pdp-label">Quantity</div>
@@ -48,8 +65,8 @@ P2B.ready.then(async ({ config }) => {
         <button class="btn btn-primary btn-block" id="buy">Buy it now</button>` : `<button class="btn btn-outline btn-block" disabled>Sold out</button>`}
         <a class="btn btn-wa btn-block" target="_blank" rel="noopener" href="${P2B.waLink(`Hello! I'm interested in "${p.name}" (${money(p.price)}). ${location.href}`)}">${P2B.icons.whatsapp.replace('<svg', '<svg width="18" height="18"')} Ask about this on WhatsApp</a>
       </div>
-      <div class="pdp-desc">${esc(p.description || '')}</div>
-      <details class="acc"><summary>Shipping &amp; delivery</summary><div>UK Royal Mail: ${money(s.shipping_uk)}${s.free_shipping_over ? ` · Free UK delivery over ${money(s.free_shipping_over)}` : ''}<br>Europe: ${money(s.shipping_eu)} · Rest of world: ${money(s.shipping_world)}<br>Orders are dispatched within 1–3 working days.</div></details>
+      <div class="pdp-desc" translate="no">${esc(p.description || '')}</div>
+      <details class="acc"><summary>Shipping &amp; delivery</summary><div>${t('UK Royal Mail')}: ${money(s.shipping_uk)}${s.free_shipping_over ? ` · ${t('Free UK delivery over')} ${money(s.free_shipping_over)}` : ''}<br>${t('Europe')}: ${money(s.shipping_eu)} · ${t('Rest of world')}: ${money(s.shipping_world)}<br>${t('Orders are dispatched within 1–3 working days.')}</div></details>
       <details class="acc"><summary>Secure payment</summary><div>Pay safely with Visa, Mastercard, Amex, Apple Pay or Google Pay. Your card details are handled by Stripe and never stored on our website.</div></details>
       <details class="acc"><summary>Questions &amp; care</summary><div>For sizing, care or gift questions, message us on WhatsApp and we'll reply personally.</div></details>
       <div class="share">
@@ -63,12 +80,34 @@ P2B.ready.then(async ({ config }) => {
     const qv = document.getElementById('qv');
     document.getElementById('qm').onclick = () => { qty = Math.max(1, qty - 1); qv.textContent = qty; };
     document.getElementById('qp').onclick = () => { qty = Math.min(20, qty + 1); qv.textContent = qty; };
-    document.getElementById('add').onclick = () => P2B.addToCart(p, qty);
-    document.getElementById('buy').onclick = () => { P2B.addToCart(p, qty); document.getElementById('checkout-btn').click(); };
+    document.querySelectorAll('.opt-group').forEach(g => g.addEventListener('click', e => {
+      const b = e.target.closest('.opt'); if (!b) return;
+      g.querySelectorAll('.opt').forEach(x => { x.classList.toggle('on', x === b); x.setAttribute('aria-checked', x === b); });
+      chosen[g.dataset.opt] = b.dataset.v; g.querySelector('.opt-val').textContent = b.dataset.v; g.classList.remove('missing');
+    }));
+    const picked = () => Object.fromEntries(OPTS.map(([, l]) => [l, chosen[l]])); // always Size, Colour, Material order
+    const ready = () => {
+      const missing = [...document.querySelectorAll('.opt-group')].filter(g => !chosen[g.dataset.opt]);
+      missing.forEach(g => g.classList.add('missing'));
+      if (missing.length) { P2B.toast(t('Please choose a ' + missing[0].dataset.opt.toLowerCase() + '.'), true); return false; }
+      return true;
+    };
+    document.getElementById('add').onclick = () => { if (ready()) P2B.addToCart(p, qty, picked()); };
+    document.getElementById('buy').onclick = () => { if (ready()) { P2B.addToCart(p, qty, picked()); document.getElementById('checkout-btn').click(); } };
   }
   const z = document.getElementById('zoom'), zi = z.querySelector('img');
   z.addEventListener('mousemove', e => { const r = z.getBoundingClientRect(); zi.style.transformOrigin = `${(e.clientX - r.left) / r.width * 100}% ${(e.clientY - r.top) / r.height * 100}%`; zi.style.transform = 'scale(1.8)'; });
   z.addEventListener('mouseleave', () => { zi.style.transform = ''; });
+
+  // Approved customer reviews for this piece
+  api('/api/reviews?product=' + p.id).then(r => {
+    document.getElementById('rev-write').href = '/reviews?product=' + p.id + '#write';
+    document.getElementById('reviews-wrap').hidden = false;
+    if (!r.count) { document.getElementById('p-reviews').innerHTML = `<p class="muted">${t('Bought this piece? Be the first to share how you wear it.')}</p>`; return; }
+    document.getElementById('rev-sum').innerHTML = `${P2B.stars(r.average)} <span class="muted">${r.average} · ${t(r.count === 1 ? '{n} review' : '{n} reviews', { n: r.count })}</span>`;
+    document.getElementById('p-reviews').innerHTML = r.reviews.map(x => P2B.reviewCard(x, { hideProduct: true })).join('');
+    document.getElementById('reviews-wrap').hidden = false;
+  }).catch(() => {});
 
   let rel = (await api(`/api/products?category=${p.category}&limit=5`)).filter(x => x.id !== p.id);
   if (rel.length < 4) rel = rel.concat((await api('/api/products?sort=new&limit=8')).filter(x => x.id !== p.id && !rel.some(r => r.id === x.id)));

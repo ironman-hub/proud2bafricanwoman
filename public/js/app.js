@@ -33,7 +33,7 @@
     if (o.body && !(o.body instanceof FormData)) { o.headers = { 'Content-Type': 'application/json', ...(o.headers || {}) }; o.body = JSON.stringify(o.body); }
     const r = await fetch(url, o);
     let data = null; try { data = await r.json(); } catch (e) {}
-    if (!r.ok) throw new Error((data && data.error) || 'Something went wrong. Please try again.');
+    if (!r.ok) throw new Error(t((data && data.error) || 'Something went wrong. Please try again.'));
     return data;
   }
 
@@ -46,15 +46,25 @@
   const CART_KEY = 'p2baw_cart_v1';
   let cart = [];
   try { cart = JSON.parse(localStorage.getItem(CART_KEY)) || []; } catch (e) { cart = []; }
+  // Each cart line is one product with one choice of size / colour / material
+  const lineKey = (id, options) => id + '|' + JSON.stringify(options || {});
+  cart.forEach(i => { if (!i.key) i.key = lineKey(i.id, i.options); });
+  const optText = o => o && Object.keys(o).length ? Object.entries(o).map(([k, v]) => `${t(k)}: ${v}`).join(' · ') : '';
+  // Translation helper; i18n.js replaces it when a language other than English is chosen
+  const t = (s, vars) => (window.P2B_I18N ? window.P2B_I18N.t(s, vars) : String(s).replace(/\{(\w+)\}/g, (m, k) => vars && vars[k] != null ? vars[k] : m));
+  // Products with more than one size / colour / material must be chosen on the product page
+  const needsChoice = p => ['sizes', 'colours', 'materials'].some(k => (p[k] || []).length > 1);
   const saveCart = () => { try { localStorage.setItem(CART_KEY, JSON.stringify(cart)); } catch (e) {} renderCart(); };
   const cartCount = () => cart.reduce((a, i) => a + i.qty, 0);
   const cartTotal = () => cart.reduce((a, i) => a + i.qty * i.price, 0);
 
-  function addToCart(p, qty = 1) {
-    if (!p.in_stock) return toast('Sorry, this piece is sold out.', true);
-    const line = cart.find(i => i.id === p.id);
+  function addToCart(p, qty = 1, options) {
+    if (!p.in_stock) return toast(t('Sorry, this piece is sold out.'), true);
+    if (!options && needsChoice(p)) { location.href = '/product?id=' + p.id; return; }
+    const key = lineKey(p.id, options);
+    const line = cart.find(i => i.key === key);
     if (line) line.qty = Math.min(20, line.qty + qty);
-    else cart.push({ id: p.id, name: p.name, price: p.price, image: p.image, category: p.category, qty });
+    else cart.push({ key, id: p.id, name: p.name, price: p.price, image: p.image, category: p.category, qty, ...(options && Object.keys(options).length ? { options } : {}) });
     saveCart();
     openCart();
   }
@@ -94,6 +104,7 @@
         ${brand()}
         <div class="hdr-right">
           <span class="locale">United Kingdom | ${(state.config.currency || 'gbp').toUpperCase()} £</span>
+          <span id="lang-slot"></span>
           <a class="icon-btn" href="${state.user && state.user.isAdmin ? '/admin' : '/account'}" aria-label="${state.user ? 'My account' : 'Log in'}" title="${state.user ? esc(state.user.name) : 'Log in / Register'}">${I.user}</a>
           <button class="icon-btn" data-open="cart" aria-label="Open cart">${I.bag}<span class="bag-count" data-n="${cartCount()}">${cartCount() || ''}</span></button>
         </div>
@@ -101,6 +112,8 @@
       <nav class="catnav" aria-label="Categories"><ul>
         <li><a href="/shop?sort=new" class="${page === 'shop' && !activeCat && params.get('sort') === 'new' ? 'active' : ''}">New in</a></li>
         ${state.config.categories.map(c => `<li><a href="/shop?category=${c.slug}" class="${activeCat === c.slug ? 'active' : ''}">${esc(c.name)}</a></li>`).join('')}
+        <li><a href="/reviews" class="${page === 'reviews' ? 'active' : ''}">Reviews</a></li>
+        <li><a href="/impact" class="${page === 'impact' ? 'active' : ''}">Our Impact</a></li>
       </ul></nav>
     </header>
     <div class="drawer-backdrop" data-close></div>
@@ -112,6 +125,8 @@
           <a href="/shop?sort=new">New in</a>
           <a href="/shop">Shop all <small>${state.config.categories.reduce((a, c) => a + c.count, 0)}</small></a>
           ${state.config.categories.map(c => `<a href="/shop?category=${c.slug}">${esc(c.name)} <small>${c.count}</small></a>`).join('')}
+          <a href="/reviews">Reviews</a>
+          <a href="/impact">Our Impact</a>
           <a href="/info">Shipping &amp; contact</a>
           <a href="/account">${state.user ? 'My account' : 'Log in / Register'}</a>
           ${state.user && state.user.isAdmin ? '<a href="/admin">Admin dashboard</a>' : ''}
@@ -140,6 +155,8 @@
         </div>
         <div><h5>Shop</h5><ul>${state.config.categories.map(c => `<li><a href="/shop?category=${c.slug}">${esc(c.name)}</a></li>`).join('')}</ul></div>
         <div><h5>Customer care</h5><ul>
+          <li><a href="/reviews">Customer reviews</a></li>
+          <li><a href="/impact">Our Impact</a></li>
           <li><a href="/info#shipping">Shipping rates</a></li>
           <li><a href="/info#contact">Contact us</a></li>
           <li><a href="/account">My account</a></li>
@@ -170,23 +187,23 @@
     if (!body) return;
     if (!cart.length) {
       body.innerHTML = `<div class="cart-empty"><div class="t">Your cart is empty</div><p class="muted">Discover pieces that celebrate African elegance.</p><a class="btn btn-primary" href="/shop" style="margin-top:12px">Continue shopping</a>
-        ${state.user ? '' : '<p style="margin-top:28px;font-size:14px">Have an account? <a href="/account" style="text-decoration:underline">Log in</a> to check out faster.</p>'}</div>`;
+        ${state.user ? '' : `<p style="margin-top:28px;font-size:14px">${t('Have an account? <a href="/account" style="text-decoration:underline">Log in</a> to check out faster.')}</p>`}</div>`;
       foot.style.display = 'none'; return;
     }
     foot.style.display = '';
     body.innerHTML = cart.map(i => `
       <div class="cart-line">
         <a href="/product?id=${i.id}"><img src="${esc(i.image || '/img/ndop.jpg')}" alt=""></a>
-        <div><h4><a href="/product?id=${i.id}">${esc(i.name)}</a></h4><span class="muted" style="font-size:14px">${money(i.price)}</span><br>
-          <div class="qty"><button data-q="${i.id}" data-d="-1" aria-label="Decrease">−</button><span>${i.qty}</span><button data-q="${i.id}" data-d="1" aria-label="Increase">+</button></div><br>
-          <button class="remove" data-rm="${i.id}">Remove</button></div>
+        <div><h4><a href="/product?id=${i.id}" translate="no">${esc(i.name)}</a></h4>${i.options ? `<div class="line-opts">${esc(optText(i.options))}</div>` : ''}<span class="muted" style="font-size:14px">${money(i.price)}</span><br>
+          <div class="qty"><button data-q="${esc(i.key)}" data-d="-1" aria-label="Decrease">−</button><span>${i.qty}</span><button data-q="${esc(i.key)}" data-d="1" aria-label="Increase">+</button></div><br>
+          <button class="remove" data-rm="${esc(i.key)}">Remove</button></div>
         <div class="price">${money(i.price * i.qty)}</div>
       </div>`).join('');
     const total = cartTotal();
     const free = state.config.settings.free_shipping_over;
     const left = free - total;
     foot.innerHTML = `
-      ${free > 0 ? `<div class="ship-bar">${left > 0 ? `You're <b>${money(left)}</b> away from free UK delivery` : 'You\'ve unlocked <b>free UK delivery</b>'}<div class="bar"><i style="width:${Math.min(100, total / free * 100)}%"></i></div></div>` : ''}
+      ${free > 0 ? `<div class="ship-bar">${left > 0 ? t("You're <b>{amount}</b> away from free UK delivery", { amount: money(left) }) : t("You've unlocked <b>free UK delivery</b>")}<div class="bar"><i style="width:${Math.min(100, total / free * 100)}%"></i></div></div>` : ''}
       <div class="totals"><span>Estimated total</span><b>${money(total, true)}</b></div>
       <p class="muted" style="font-size:13px;margin:0 0 16px">Taxes included. Shipping calculated at checkout.</p>
       <button class="btn btn-primary btn-block" id="checkout-btn">Check out</button>
@@ -195,19 +212,19 @@
   }
 
   function waOrderText() {
-    return 'Hello! I would like to order:\n' + cart.map(i => `• ${i.qty} × ${i.name} (${money(i.price)})`).join('\n') + `\nSubtotal: ${money(cartTotal())}`;
+    return 'Hello! I would like to order:\n' + cart.map(i => `• ${i.qty} × ${i.name}${i.options ? ' [' + Object.entries(i.options).map(([k, v]) => `${k}: ${v}`).join(', ') + ']' : ''} (${money(i.price)})`).join('\n') + `\nSubtotal: ${money(cartTotal())}`;
   }
 
   async function checkout(btn) {
     if (!state.config.paymentsEnabled) {
-      toast(`Card payments are being set up. <a href="${waLink(waOrderText())}" target="_blank" rel="noopener">Order on WhatsApp</a>`, true);
+      toast(`${t('Card payments are being set up.')} <a href="${waLink(waOrderText())}" target="_blank" rel="noopener">${t('Order on WhatsApp')}</a>`, true);
       return;
     }
-    btn.disabled = true; btn.textContent = 'Redirecting to secure payment…';
+    btn.disabled = true; btn.textContent = t('Redirecting to secure payment…');
     try {
-      const r = await api('/api/checkout', { method: 'POST', body: { items: cart.map(i => ({ id: i.id, qty: i.qty })) } });
+      const r = await api('/api/checkout', { method: 'POST', body: { items: cart.map(i => ({ id: i.id, qty: i.qty, options: i.options })) } });
       location.href = r.url;
-    } catch (e) { toast(esc(e.message), true); btn.disabled = false; btn.textContent = 'Check out'; }
+    } catch (e) { toast(esc(e.message), true); btn.disabled = false; btn.textContent = t('Check out'); }
   }
 
   function openDrawer(id) {
@@ -222,6 +239,49 @@
   }
   const openCart = () => { renderCart(); openDrawer('cart'); };
 
+  // Shrink large photos in the browser before upload (keeps uploads fast and under the size limit)
+  async function shrink(file, max = 2000, quality = 0.86, minSize = 1.5e6) {
+    try {
+      if (!/^image\/(jpeg|png|webp)$/.test(file.type) || (file.size < minSize)) return file;
+      const bmp = await createImageBitmap(file);
+      const scale = Math.min(1, max / Math.max(bmp.width, bmp.height));
+      const c = document.createElement('canvas'); c.width = Math.round(bmp.width * scale); c.height = Math.round(bmp.height * scale);
+      c.getContext('2d').drawImage(bmp, 0, 0, c.width, c.height);
+      const blob = await new Promise(r => c.toBlob(r, 'image/jpeg', quality));
+      return blob ? new File([blob], file.name.replace(/\.\w+$/, '') + '.jpg', { type: 'image/jpeg' }) : file;
+    } catch (e) { return file; }
+  }
+
+  const stars = (n, cls = '') => `<span class="stars ${cls}" role="img" aria-label="${n} / 5">${[1, 2, 3, 4, 5].map(i => `<i class="${i <= Math.round(n) ? 'on' : ''}">★</i>`).join('')}</span>`;
+
+  // ---------- Review card (customer photos + words) ----------
+  function reviewCard(r, opts = {}) {
+    const [first, ...more] = r.images || [];
+    return `
+    <article class="review">
+      ${first ? `<div class="review-ph">
+        <button type="button" class="main" data-zoom="${esc(first)}" aria-label="${esc(t('View photo'))}"><img src="${esc(first)}" alt="${esc(t('Customer photo'))}" loading="lazy"></button>
+        ${more.length ? `<div class="thumbs">${more.map(u => `<button type="button" data-zoom="${esc(u)}" aria-label="${esc(t('View photo'))}"><img src="${esc(u)}" alt="" loading="lazy"></button>`).join('')}</div>` : ''}
+      </div>` : ''}
+      <div class="review-body">
+        ${stars(r.rating)}
+        <p translate="no">${esc(r.body)}</p>
+        <div class="review-by"><b translate="no">${esc(r.name)}</b>${r.location ? ` <span class="muted" translate="no">· ${esc(r.location)}</span>` : ''}</div>
+        ${r.product_name && !opts.hideProduct ? `<a class="review-prod" href="/product?id=${r.product_id}">${t('Wearing')} <span translate="no">${esc(r.product_name)}</span> →</a>` : ''}
+      </div>
+    </article>`;
+  }
+  function lightbox(src) {
+    let lb = $('.lightbox');
+    if (!lb) {
+      lb = document.createElement('div'); lb.className = 'lightbox'; lb.setAttribute('role', 'dialog'); lb.setAttribute('aria-modal', 'true');
+      lb.innerHTML = `<button class="icon-btn" aria-label="${esc(t('Close'))}">${I.close}</button><img alt="">`;
+      lb.onclick = () => lb.classList.remove('open');
+      document.body.appendChild(lb);
+    }
+    lb.querySelector('img').src = src; lb.classList.add('open');
+  }
+
   // ---------- Product card ----------
   function productCard(p) {
     return `
@@ -230,10 +290,10 @@
         <img src="${esc(p.image || '/img/ndop.jpg')}" alt="${esc(p.name)}" loading="lazy">
         ${!p.in_stock ? '<span class="tag sold">Sold out</span>' : p.featured ? '<span class="tag">Bestseller</span>' : ''}
       </a>
-      <h3><a href="/product?id=${p.id}">${esc(p.name)}</a></h3>
+      <h3><a href="/product?id=${p.id}" translate="no">${esc(p.name)}</a></h3>
       <div class="row">
         <span class="price">${money(p.price, true)}</span>
-        ${p.in_stock ? `<button class="add" data-add="${p.id}" aria-label="Add ${esc(p.name)} to cart" title="Add to cart">${I.bag}</button>` : ''}
+        ${p.in_stock ? (needsChoice(p) ? `<a class="add" href="/product?id=${p.id}" aria-label="${esc(t('Choose options'))}" title="${esc(t('Choose options'))}">${I.bag}</a>` : `<button class="add" data-add="${p.id}" aria-label="${esc(t('Add to cart'))}" title="${esc(t('Add to cart'))}">${I.bag}</button>`) : ''}
       </div>
     </article>`;
   }
@@ -262,17 +322,18 @@
     clearInterval(annT); annT = setInterval(() => ann(1), 4500);
   }
   document.addEventListener('click', e => {
-    const t = e.target.closest('[data-open],[data-close],[data-add],[data-q],[data-rm],[data-ann],#checkout-btn');
+    const t = e.target.closest('[data-open],[data-close],[data-add],[data-q],[data-rm],[data-ann],[data-zoom],#checkout-btn');
     if (!t) return;
-    if (t.dataset.open) { t.dataset.open === 'cart' ? openCart() : openDrawer(t.dataset.open); }
+    if (t.dataset.zoom) lightbox(t.dataset.zoom);
+    else if (t.dataset.open) { t.dataset.open === 'cart' ? openCart() : openDrawer(t.dataset.open); }
     else if (t.hasAttribute('data-close')) closeDrawers();
     else if (t.dataset.add) { const p = productCache.get(+t.dataset.add); if (p) addToCart(p); }
-    else if (t.dataset.q) { const l = cart.find(i => i.id === +t.dataset.q); if (l) { l.qty += +t.dataset.d; if (l.qty < 1) cart = cart.filter(i => i !== l); saveCart(); } }
-    else if (t.dataset.rm) { cart = cart.filter(i => i.id !== +t.dataset.rm); saveCart(); }
+    else if (t.dataset.q) { const l = cart.find(i => i.key === t.dataset.q); if (l) { l.qty = Math.min(20, l.qty + +t.dataset.d); if (l.qty < 1) cart = cart.filter(i => i !== l); saveCart(); } }
+    else if (t.dataset.rm) { cart = cart.filter(i => i.key !== t.dataset.rm); saveCart(); }
     else if (t.dataset.ann) ann(+t.dataset.ann);
     else if (t.id === 'checkout-btn') checkout(t);
   });
-  document.addEventListener('keydown', e => { if (e.key === 'Escape') closeDrawers(); });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') { closeDrawers(); const lb = $('.lightbox'); if (lb) lb.classList.remove('open'); } });
   window.addEventListener('scroll', () => { const h = $('.site-header'); if (h) h.classList.toggle('scrolled', scrollY > 10); }, { passive: true });
 
   // ---------- Boot ----------
@@ -294,12 +355,14 @@
       renderCart();
       annT = setInterval(() => ann(1), 4500);
     }
+    if (window.P2B_I18N) window.P2B_I18N.mount();
     setTimeout(reveal, 30);
     return state;
   })();
 
   window.P2B = {
     ready, state, api, money, esc, waLink, toast, productCard, remember, addToCart, openCart, reveal, catName, scroller, icons: I,
+    t, optText, needsChoice, shrink, stars, reviewCard,
     clearCart: () => { cart = []; saveCart(); }, closeDrawers, openDrawer,
     setUser: u => { state.user = u; },
   };

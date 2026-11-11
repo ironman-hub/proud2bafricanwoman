@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Shop | Proud2bAfricanWoman</title>
-<meta name="theme-color" content="#1b4597">
+<meta name="theme-color" content="#2d6cc9">
 <link rel="icon" href="/img/logo-black.png">
 <link rel="preload" href="/fonts/jost-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="css/styles.css">
@@ -59,10 +59,12 @@
   </div>
 </aside>
 
+<script src="js/i18n-dict.js"></script>
+<script src="js/i18n.js"></script>
 <script src="js/app.js"></script>
 <script>
 P2B.ready.then(({ config }) => {
-  const { esc, api } = P2B;
+  const { esc, api, t } = P2B;
   document.getElementById('ficon').innerHTML = P2B.icons.filter;
   const params = new URLSearchParams(location.search);
   const f = { category: params.get('category') || '', q: params.get('q') || '', sort: params.get('sort') || 'featured', min: params.get('min') || '', max: params.get('max') || '', instock: params.get('instock') || '' };
@@ -75,13 +77,13 @@ P2B.ready.then(({ config }) => {
     'accessories': 'Bags, wraps and finishing touches with a bold African spirit.',
     'beauty-hair': 'Beauty and hair essentials to care for and celebrate your crown.',
   };
-  if (params.get('cancelled')) P2B.toast('Payment cancelled — your cart is saved.');
+  if (params.get('cancelled')) P2B.toast(t('Payment cancelled — your cart is saved.'));
   const sortEl = document.getElementById('sort'); sortEl.value = f.sort;
 
   function head() {
     const c = config.categories.find(c => c.slug === f.category);
-    document.getElementById('title').textContent = c ? c.name : f.q ? `Search: “${f.q}”` : f.sort === 'new' ? 'New in' : 'All products';
-    if (c) document.getElementById('subtitle').textContent = blurbs[c.slug] || '';
+    document.getElementById('title').textContent = c ? t(c.name) : f.q ? t('Search: “{q}”', { q: f.q }) : f.sort === 'new' ? t('New in') : t('All products');
+    if (c) document.getElementById('subtitle').textContent = t(blurbs[c.slug] || '');
     document.getElementById('crumb-cat').innerHTML = c ? ' / ' + esc(c.name) : '';
     document.title = `${c ? c.name : 'Shop'} | Proud2bAfricanWoman`;
     document.querySelectorAll('.catnav a').forEach(a => a.classList.toggle('active', a.getAttribute('href') === `/shop?category=${f.category}`));
@@ -94,10 +96,10 @@ P2B.ready.then(({ config }) => {
       `<button class="fcat ${!f.category ? 'active' : ''}" data-fcat=""><span><i class="box"></i>All products</span><small>(${total})</small></button>` +
       config.categories.map(c => `<button class="fcat ${f.category === c.slug ? 'active' : ''}" data-fcat="${c.slug}"><span><i class="box"></i>${esc(c.name)}</span><small>(${c.count})</small></button>`).join('');
     const chips = [];
-    if (c) chips.push(['category', c.name]);
+    if (c) chips.push(['category', t(c.name)]);
     if (f.q) chips.push(['q', `“${f.q}”`]);
     if (f.min || f.max) chips.push(['price', `£${f.min || 0} – £${f.max || '∞'}`]);
-    if (f.instock) chips.push(['instock', 'In stock']);
+    if (f.instock) chips.push(['instock', t('In stock')]);
     document.getElementById('chips').innerHTML = chips.map(([k, l]) => `<button class="chip" data-chip="${k}">${esc(l)} ✕</button>`).join('');
     document.getElementById('pmin').value = f.min; document.getElementById('pmax').value = f.max;
     document.getElementById('instock').checked = f.instock === '1';
@@ -108,7 +110,7 @@ P2B.ready.then(({ config }) => {
     history.replaceState(null, '', '/shop' + (qs.toString() ? '?' + qs : ''));
     head();
     const list = P2B.remember(await api('/api/products?' + qs));
-    document.getElementById('count').textContent = `${list.length} product${list.length === 1 ? '' : 's'}`;
+    document.getElementById('count').textContent = t(list.length === 1 ? '{n} product' : '{n} products', { n: list.length });
     document.getElementById('grid').innerHTML = list.length ? list.map(P2B.productCard).join('') :
       `<div class="empty-state" style="grid-column:1/-1"><div class="t">New pieces coming soon</div><p class="muted">We're curating this collection right now. Ask us on WhatsApp what's arriving next.</p><a class="btn btn-wa" target="_blank" rel="noopener" href="${P2B.waLink('Hello! What new products are coming soon?')}" style="margin-top:12px">Ask on WhatsApp</a></div>`;
   }

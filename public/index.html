@@ -4,8 +4,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Proud2bAfricanWoman | African Jewellery, Fashion & Lifestyle</title>
-<meta name="description" content="Authentic African jewellery, clothing, home décor, beauty & hair, kids and groceries. Celebrate culture, confidence and bold African elegance.">
-<meta name="theme-color" content="#1b4597">
+<meta name="description" content="Authentic African jewellery, clothing, home décor, beauty & hair, kids and accessories. Celebrate culture, confidence and bold African elegance.">
+<meta name="theme-color" content="#2d6cc9">
 <link rel="icon" href="/img/logo-black.png">
 <link rel="preload" href="/fonts/jost-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="css/styles.css">
@@ -60,16 +60,56 @@
     <div class="wrap banners" id="banners"></div>
   </section>
 
+  <section class="block" id="happy" hidden style="padding-top:20px">
+    <div class="wrap">
+      <div class="sec-head reveal">
+        <div><h2 class="h-sec">Our happy clients</h2><p>Real customers wearing their pieces with pride.</p></div>
+        <a href="/reviews" class="link">See all reviews</a>
+      </div>
+      <div class="reviews-grid home" id="happy-list"></div>
+      <div class="center" style="margin-top:36px"><a href="/reviews#write" class="btn btn-outline">Share your look</a></div>
+    </div>
+  </section>
+
   <div class="ndop-strip" aria-hidden="true"></div>
   <section class="story" id="about">
     <div class="ph"><img src="/img/owner.jpg" alt="Nelly, founder of Proud2bAfricanWoman" loading="lazy"></div>
     <div class="txt reveal">
       <span class="eyebrow">Meet the owner</span>
-      <h2>The heart behind <em>the brand</em></h2>
+      <h2 data-t>The heart behind <em>the brand</em></h2>
       <p>Proud2bAfricanWoman is a brand known for crafting breathtaking pieces that have captured attention and admiration for years. At the heart of the brand is Nelly — a gifted and imaginative designer with a deep passion for creating African jewellery that stands out for its beauty and originality.</p>
       <p>When you meet Nelly, you're instantly drawn to her warmth, creativity and genuine love for her craft. Her enthusiasm shines through in every design, making each piece not just an accessory, but a reflection of artistry and heart.</p>
       <div class="sign">Nelly</div>
       <div><a class="btn btn-dark" id="owner-wa" target="_blank" rel="noopener">Say hello on WhatsApp</a></div>
+    </div>
+  </section>
+  <section class="block home-impact" id="impact">
+    <div class="wrap">
+      <div class="center reveal">
+        <span class="eyebrow">Every purchase makes a difference</span>
+        <h2 class="h-sec" style="margin-top:12px">Our Impact</h2>
+      </div>
+      <p class="impact-lead reveal" style="margin-top:28px">At Proud2BAfricanWoman, we believe that every purchase can make a difference. Our mission goes beyond selling African products; we are committed to celebrating African heritage, supporting African creativity and contributing to the economic empowerment of African communities.</p>
+      <div class="impact-cards reveal">
+        <article class="panel"><span class="num">01</span><h3>Our Impact</h3><p>Discover how our business contributes to supporting African artisans, entrepreneurs, local producers and communities through the products we source and promote.</p></article>
+        <article class="panel"><span class="num">02</span><h3>Our Commitment to Africa</h3><p>We are committed to promoting African-made products, supporting African-owned businesses and showcasing the richness, diversity and creativity of the African continent.</p></article>
+        <article class="panel"><span class="num">03</span><h3>Empowering African Communities</h3><p>We believe in creating opportunities for African artisans, particularly women and small-scale entrepreneurs, by helping them reach wider markets, gain visibility and generate sustainable income.</p></article>
+      </div>
+    </div>
+  </section>
+  <section class="values">
+    <div class="wrap">
+      <span class="eyebrow">What we stand for</span>
+      <h2 class="serif" data-t>Our <em>Values</em></h2>
+      <ul class="values-list">
+        <li>Supporting African businesses.</li>
+        <li>Promoting African-made products.</li>
+        <li>Celebrating African culture and heritage.</li>
+        <li>Empowering women and local entrepreneurs.</li>
+        <li>Encouraging ethical and responsible sourcing.</li>
+        <li>Creating opportunities through trade and cultural exchange.</li>
+      </ul>
+      <p class="values-tagline">Proud of Africa. Supporting African Talent. Creating an Impact.</p>
     </div>
   </section>
   <div class="ndop-strip" aria-hidden="true"></div>
@@ -82,6 +122,8 @@
     </div>
   </section>
 </main>
+<script src="js/i18n-dict.js"></script>
+<script src="js/i18n.js"></script>
 <script src="js/app.js"></script>
 <script>
 P2B.ready.then(async ({ config }) => {
@@ -114,7 +156,7 @@ P2B.ready.then(async ({ config }) => {
   tiles.innerHTML = config.categories.map(c => `
     <a class="tile" href="/shop?category=${c.slug}">
       <div class="ph"><img src="${esc(c.image || '/img/ndop.jpg')}" alt="${esc(c.name)}" loading="lazy"></div>
-      <div class="lbl">${esc(c.name)} <i>→</i><small>${c.count ? c.count + ' item' + (c.count > 1 ? 's' : '') : ''}</small></div>
+      <div class="lbl">${esc(c.name)} <i>→</i><small>${c.count ? P2B.t(c.count > 1 ? '{n} items' : '{n} item', { n: c.count }) : ''}</small></div>
     </a>`).join('');
   P2B.scroller(document.getElementById('cat-prev'), document.getElementById('cat-next'), tiles);
 
@@ -132,6 +174,13 @@ P2B.ready.then(async ({ config }) => {
     try { await api('/api/subscribe', { method: 'POST', body: { email: inp.value } }); inp.value = ''; P2B.toast('Thank you for subscribing ✓'); }
     catch (ex) { P2B.toast(esc(ex.message), true); }
   };
+
+  // Approved customer reviews with photos
+  api('/api/reviews?photos=1&limit=4').then(r => {
+    if (!r.reviews.length) return;
+    document.getElementById('happy-list').innerHTML = r.reviews.map(x => P2B.reviewCard(x)).join('');
+    document.getElementById('happy').hidden = false; P2B.reveal();
+  }).catch(() => {});
 
   // Products
   const list = P2B.remember(await api('/api/products?sort=featured&limit=8'));
