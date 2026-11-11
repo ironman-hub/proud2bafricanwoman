@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Thank you — Proud2bAfricanWoman</title>
+<meta name="theme-color" content="#2d6cc9">
+<link rel="icon" href="/img/logo-black.png">
+<link rel="preload" href="/fonts/cormorant-garamond-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="css/styles.css">
+</head>
+<body data-page="success">
+<main class="wrap"><div class="success" id="s"><p class="muted">Confirming your payment…</p></div></main>
+<script src="js/i18n-dict.js"></script>
+<script src="js/i18n.js"></script>
+<script src="js/app.js"></script>
+<script>
+P2B.ready.then(async () => {
+  const { esc, money, api } = P2B;
+  const el = document.getElementById('s');
+  const sid = new URLSearchParams(location.search).get('session_id');
+  try {
+    const r = await api('/api/checkout/confirm?session_id=' + encodeURIComponent(sid || ''));
+    if (!r.paid) throw new Error('not paid');
+    P2B.clearCart();
+    el.innerHTML = `
+      <div class="tick"><svg width="38" height="38" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg></div>
+      <span class="eyebrow">${P2B.t('Order #{id} confirmed', { id: r.order.id })}</span>
+      <h1 style="margin-top:14px">${P2B.t('Thank you, <em>beautiful.</em>')}</h1>
+      <p class="muted" style="font-size:17px">${P2B.t('Your payment of <b style="color:var(--ink)">{amount}</b> was successful. A receipt has been sent to {email}. We\'ll pack your order with love and let you know when it ships.', { amount: money(r.order.total), email: esc(r.order.email || P2B.t('your email')) })}</p>
+      <div class="panel" style="text-align:left;margin:30px 0">${r.order.items.map(i => `<div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--line)"><span>${i.qty} × <span translate="no">${esc(i.name)}</span>${i.options ? `<br><small class="muted">${esc(P2B.optText(i.options))}</small>` : ''}</span><b>${money(i.price * i.qty)}</b></div>`).join('')}</div>
+      <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap"><a class="btn btn-primary" href="/shop">Continue shopping</a><a class="btn btn-ghost" href="/account">View my orders</a></div>`;
+  } catch (e) {
+    el.innerHTML = `<h1>${P2B.t("We're checking your <em>payment</em>")}</h1><p class="muted">If you completed payment, your order is safe — it can take a moment to confirm. Message us on WhatsApp with any questions.</p><a class="btn btn-wa" target="_blank" rel="noopener" href="${P2B.waLink('Hello! I just placed an order and wanted to check it went through.')}">Chat on WhatsApp</a>`;
+  }
+});
+</script>
+</body>
+</html>

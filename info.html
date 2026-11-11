@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Shipping & contact — Proud2bAfricanWoman</title>
+<meta name="theme-color" content="#2d6cc9">
+<link rel="icon" href="/img/logo-black.png">
+<link rel="preload" href="/fonts/cormorant-garamond-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="css/styles.css">
+</head>
+<body data-page="info">
+<main>
+  <section class="page-banner"><div class="wrap">
+    <div class="crumbs"><a href="/">Home</a> &nbsp;/&nbsp; Help</div>
+    <h1 data-t>Shipping &amp; <em>contact</em></h1>
+    <p>Everything you need to know about delivery — and how to reach us personally.</p>
+  </div></section>
+  <div class="wrap info-grid" style="margin-top:48px" id="info"></div>
+</main>
+<script src="js/i18n-dict.js"></script>
+<script src="js/i18n.js"></script>
+<script src="js/app.js"></script>
+<script>
+P2B.ready.then(({ config }) => {
+  const { esc, money } = P2B; const s = config.settings;
+  document.getElementById('info').innerHTML = `
+    <div class="panel" id="shipping"><h3>Shipping rates</h3><ul class="rates">
+      <li><span>UK Royal Mail</span><b>${money(s.shipping_uk)}</b></li>
+      <li><span>Europe</span><b>${money(s.shipping_eu)}</b></li>
+      <li><span>Rest of world</span><b>${money(s.shipping_world)}</b></li>
+      ${s.free_shipping_over ? `<li><span>Free UK delivery over</span><b>${money(s.free_shipping_over)}</b></li>` : ''}
+    </ul><p class="muted" style="font-size:13.5px">Orders are packed with care and dispatched within 1–3 working days.</p></div>
+    <div class="panel"><h3>Business hours</h3><ul class="rates">${(s.hours || '').split('·').map(h => `<li><span>${esc(h.trim())}</span></li>`).join('')}</ul></div>
+    <div class="panel" id="contact"><h3>Contact us</h3>
+      <p class="muted">The quickest way to reach us is WhatsApp — we reply personally.</p>
+      <a class="btn btn-wa btn-block" target="_blank" rel="noopener" href="${P2B.waLink('Hello Proud2bAfricanWoman!')}">Chat on WhatsApp</a>
+      ${s.email ? `<a class="btn btn-ghost btn-block" style="margin-top:10px" href="mailto:${esc(s.email)}">${esc(s.email)}</a>` : ''}
+    </div>`;
+});
+</script>
+</body>
+</html>
